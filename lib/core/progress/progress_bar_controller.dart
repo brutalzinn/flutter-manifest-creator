@@ -12,9 +12,13 @@ class ProgressBarController extends ChangeNotifier {
   bool? running;
 
   void done() {
-    value = ((progress) /
-        maxProgress); //Utils.remapper(progress.value + 0.1, 0, maxProgress, 0, 1); // its just percentage. dont need remap for this case.
-    progress++;
+    _calculateProgress();
+    notifyListeners();
+  }
+
+  void complete() {
+    progress = maxProgress;
+    _calculateProgress();
     notifyListeners();
   }
 
@@ -32,5 +36,10 @@ class ProgressBarController extends ChangeNotifier {
   void setFeedback(String msg) {
     feedback = msg;
     notifyListeners();
+  }
+
+  void _calculateProgress() {
+    value = ((progress) / maxProgress);
+    progress++;
   }
 }

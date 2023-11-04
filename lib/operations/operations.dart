@@ -33,25 +33,40 @@ class Operations {
     }
     var files = Directory(fromDir).listSync(recursive: true);
     if (useProgress) {
+      progressController.setFeedback("Copying mods to out dir.");
       progressController.setMaxProgress(files.length);
     }
     for (var file in files) {
-      var outFilePath = '$toDir/${file.path}';
-      await File(file.path).copy(outFilePath);
+      final filename = path.basename(file.path);
+      if (file is Directory) {
+        final dirName = path.join(toDir, filename);
+        await Directory(dirName).create(recursive: true);
+        continue;
+      }
+      final relativePath = path.relative(file.path, from: fromDir);
+      final outputPath = path.join(toDir, relativePath);
+      await File(file.path).copy(outputPath);
       if (useProgress) {
+        progressController.setFeedback("copying $filename to $toDir");
         progressController.done();
       }
     }
   }
 
-  static Future<void> createZip(String inputDir, String outputZipDir) async {
-    var files = Directory(inputDir).listSync(recursive: true);
-    var encoder = ZipFileEncoder();
-    encoder.create(path.join(outputZipDir, "output.zip"));
-    for (var file in files) {
-      await encoder.addFile(File(file.path));
+  static Future<void> createZip(String inputDir, String outputZipDir,
+      {ProgressBarController? progressController}) async {
+    final useProgress = progressController != null;
+    // var files = Directory(inputDir).listSync(recursive: true);
+    if (useProgress) {
+      progressController.setFeedback("Starting ziping out dir..");
+      progressController.setMaxProgress(100);
     }
-    encoder.close();
+    var encoder = ZipFileEncoder();
+    final directory = Directory(inputDir);
+    encoder.zipDirectory(directory, filename: outputZipDir, onProgress: (p0) {
+      if (useProgress) progressController.done();
+    });
+    if (useProgress) progressController.complete();
   }
 
   static Future<void> downloadFile(FileModel file, String outputDir) async {
@@ -71,40 +86,44 @@ class Operations {
     }
   }
 
-  static Future<void> cleanupOutputDir(
-      List<FileModel> manifestFiles,
-      String outputDir,
-      List<String> ignoredItems,
-      CallbackProgress callbackAction) async {
-    final progress = ProgressModel();
-    var files = Directory(outputDir).listSync(recursive: true);
-    var manifestFileSet = {
-      for (var file in manifestFiles) file.path: file.hash
-    };
-    for (var file in files) {
-      progress.setFeedback("verify ${file.parent.path}");
-      callbackAction(progress);
-
-      var fileWithoutPathSeparator =
-          file.path.replaceAll(Platform.pathSeparator, "/");
-
-      var relativePath =
-          fileWithoutPathSeparator.substring(outputDir.length + 1);
-
-      final isToIgnore = shouldIgnore(relativePath, ignoredItems);
-      if (isToIgnore || file is Directory) {
-        progress.setFeedback("ignore $fileWithoutPathSeparator");
-        callbackAction(progress);
-        continue;
+  static Future<void> uploadFile(String filePath, String uploadUrl,
+      {Map<String, String>? headers,
+      ProgressBarController? progressController}) async {
+    final useProgress = progressController != null;
+    if (useProgress) {
+      progressController.reset();
+      progressController.setFeedback("Prepare for uploading..");
+    }
+    try {
+      var request = http.MultipartRequest('POST', Uri.parse(uploadUrl));
+      if (headers != null) {
+        request.headers.addAll(headers);
       }
-      final hash = await calculateFileHash(file.path);
-      final isDiff = manifestFileSet[relativePath] != hash;
-      final isAtManifest = manifestFileSet.containsKey(relativePath);
-      if (!isAtManifest || isDiff) {
-        await file.delete();
-        progress.setFeedback("delete ${file.parent.path}");
-        callbackAction(progress);
+      var file = await http.MultipartFile.fromPath('file', filePath,
+          filename: 'file.zip');
+      request.files.add(file);
+      var response = await request.send();
+      if (response.statusCode == 201) {
+        print('File uploaded successfully');
+        if (useProgress) {
+          progressController.complete();
+          progressController.setFeedback("File uploaded successfully");
+        }
+      } else {
+        if (useProgress) {
+          progressController.setFeedback(
+              'Failed to upload file. Status code: ${response.statusCode}');
+          progressController.complete();
+        }
+        throw Exception(
+            'Failed to upload file. Status code: ${response.statusCode}');
       }
+    } catch (error) {
+      if (useProgress) {
+        progressController.setFeedback('Error uploading file: $error');
+        progressController.complete();
+      }
+      throw Exception('Error uploading file: $error');
     }
   }
 

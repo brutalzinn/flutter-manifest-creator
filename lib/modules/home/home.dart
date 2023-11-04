@@ -5,6 +5,7 @@ import 'package:flutter_manifest_creator/core/resources.dart';
 import 'package:flutter_manifest_creator/core/ui/widgets/custom_elevated_button.dart';
 import 'package:flutter_manifest_creator/core/ui/widgets/custom_input_text.dart';
 import 'package:flutter_manifest_creator/core/ui/widgets/custom_progress_bar.dart';
+import 'package:flutter_manifest_creator/modules/config/config.dart';
 
 import 'logic/home_logic.dart';
 
@@ -55,11 +56,10 @@ class _ManifestCreatorState extends State<Home> {
                 CustomElevatedButton(
                   label: 'Config',
                   onPressed: () {
-                    final config = ConfigModel(
-                        manifestURL: manifestUrlController.text,
-                        outputDir: outputDirController.text,
-                        ignoreFolders: ignoreFolderController.text);
-                    widget.homeLogic.saveConfig(config);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => Config()),
+                    );
                   },
                 )
               ]),
